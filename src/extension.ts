@@ -34,6 +34,7 @@ import {
   debug,
   DebugSessionCustomEvent,
   ThemeColor,
+  FileSystemProvider,
 } from "vscode";
 import {
   LanguageClient,
@@ -120,8 +121,11 @@ import { MetalsSlowTaskType } from "./interfaces/MetalsSlowTask";
 import { downloadProgress } from "./downloadProgress";
 import { detectLaunchConfigurationChanges } from "./detectLaunchConfigurationChanges";
 import { registerCopyPasteHooks } from "./metalsCopyPaste";
+import MetalsFileSystemProvider from "./MetalsFileSystemProvider";
 
 const outputChannel = window.createOutputChannel("Metals");
+
+const librariesURI = Uri.parse("metalsfs:/metalsLibraries");
 
 let treeViews: MetalsTreeViews | undefined;
 let currentClient: LanguageClient | undefined;
@@ -626,6 +630,7 @@ async function launchMetals(
     icons: "vscode",
     inputBoxProvider: true,
     isVirtualDocumentSupported: true,
+    isLibraryFileSystemSupported: true,
     openFilesOnRenameProvider: true,
     openNewWindowProvider: true,
     quickPickProvider: true,
@@ -650,6 +655,8 @@ async function launchMetals(
       { scheme: "file", language: "twirl-txt" },
       { scheme: "jar", language: "scala" },
       { scheme: "jar", language: "java" },
+      { scheme: "metalsfs", language: "scala" },
+      { scheme: "metalsfs", language: "java" },
     ],
     synchronize: {
       configurationSection: "metals",
@@ -725,6 +732,18 @@ async function launchMetals(
     );
   }
 
+  function registerFileSystemProvider(
+    scheme: string,
+    provider: FileSystemProvider,
+  ) {
+    context.subscriptions.push(
+      workspace.registerFileSystemProvider(scheme, provider, {
+        isCaseSensitive: true,
+        isReadonly: true,
+      }),
+    );
+  }
+
   function registerTextDocumentContentProvider(
     scheme: string,
     provider: TextDocumentContentProvider,
@@ -740,6 +759,10 @@ async function launchMetals(
   registerTextDocumentContentProvider("jar", metalsFileProvider);
 
   registerMetalsClassFileCustomEditor(context, client, metalsFileProvider);
+
+  registerCommand("metals.show-libraries-folder", async () =>
+    addLibrariesFolder(),
+  );
 
   registerCommand("metals.show-cfr", async (uri: Uri) => {
     await decodeAndShowFile(client, metalsFileProvider, uri, "cfr");
@@ -809,6 +832,7 @@ async function launchMetals(
     () => {
       registerBloopInstance();
       const doctorProvider = new DoctorProvider(client, context);
+      let metalsFileSystemProvider: MetalsFileSystemProvider | undefined;
       let stacktrace: WebviewPanel | undefined;
 
       function getStacktracePanel(): WebviewPanel {
@@ -1099,6 +1123,21 @@ async function launchMetals(
             }
             case ClientCommands.BuildConnect: {
               commands.executeCommand(ServerCommands.BuildConnect);
+              break;
+            }
+            case ClientCommands.LibraryFileSystemReady: {
+              if (!metalsFileSystemProvider) {
+                metalsFileSystemProvider = new MetalsFileSystemProvider(
+                  client,
+                  librariesURI,
+                );
+                registerFileSystemProvider(
+                  librariesURI.scheme,
+                  metalsFileSystemProvider,
+                );
+              }
+              metalsFileSystemProvider.reinitialiseURI(librariesURI);
+              addLibrariesFolder();
               break;
             }
             default:
@@ -1761,6 +1800,39 @@ function detectConfigurationChanges() {
           }
         }),
   );
+}
+
+function addLibrariesFolder() {
+  const libraryFolderName = "Metals - Libraries";
+
+  const newLibraryFolder = {
+    uri: librariesURI,
+    name: libraryFolderName,
+  };
+  const folderByUri = workspace.getWorkspaceFolder(librariesURI);
+  if (folderByUri && folderByUri.name !== libraryFolderName) {
+    workspace.updateWorkspaceFolders(folderByUri.index, 1, newLibraryFolder);
+  } else {
+    const folderByName = workspace.workspaceFolders?.find(
+      (folder) => folder.name === libraryFolderName,
+    );
+    if (folderByName && folderByName.uri.toString() !== librariesURI.toString()) {
+      if (folderByUri) {
+        workspace.updateWorkspaceFolders(folderByName.index, 1);
+      } else {
+        workspace.updateWorkspaceFolders(
+          folderByName.index,
+          1,
+          newLibraryFolder,
+        );
+      }
+    } else if (!folderByUri) {
+      const workspaceCount = workspace.workspaceFolders?.length;
+      if (workspaceCount !== undefined) {
+        workspace.updateWorkspaceFolders(workspaceCount, null, newLibraryFolder);
+      }
+    }
+  }
 }
 
 // NOTE(gabro): we would normally use the `configurationDefaults` contribution point in the

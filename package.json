@@ -53,6 +53,7 @@
     "onLanguage:twirl-xml",
     "onLanguage:twirl-js",
     "onLanguage:twirl-txt",
+    "onFileSystem:metalsfs",
     "workspaceContains:build.sbt",
     "workspaceContains:build.sc",
     "workspaceContains:build.mill",
@@ -771,6 +772,11 @@
         "title": "Show release notes"
       },
       {
+        "command": "metals.show-libraries-folder",
+        "category": "Metals",
+        "title": "Show libraries folder in file explorer"
+      },
+      {
         "command": "metals.scalafix-run",
         "category": "Metals",
         "title": "Run all Scalafix rules"
@@ -1102,6 +1108,10 @@
         },
         {
           "command": "metals.show-release-notes",
+          "when": "metals:enabled"
+        },
+        {
+          "command": "metals.show-libraries-folder",
           "when": "metals:enabled"
         },
         {
