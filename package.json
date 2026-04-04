@@ -167,7 +167,7 @@
 				"id": "twirl-html",
 				"extensions": ["*.scala.html"],
 				"aliases": ["Twirl HTML"],
-				"configuration": "./language-configuration.json",
+				"configuration": "./syntaxes/language-configurations/twirl-html.language-configuration.json",
         "icon": {
           "dark": "icons/file_type_play.svg",
           "light": "icons/file_type_play.svg"
