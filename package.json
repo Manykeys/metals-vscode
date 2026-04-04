@@ -163,16 +163,20 @@
           "light": "icons/scalameta-logo.png"
         }
       },
-			{
-				"id": "twirl-html",
-				"extensions": ["*.scala.html"],
-				"aliases": ["Twirl HTML"],
-				"configuration": "./syntaxes/language-configurations/twirl-html.language-configuration.json",
+      {
+        "id": "twirl-html",
+        "extensions": [
+          "*.scala.html"
+        ],
+        "aliases": [
+          "Twirl HTML"
+        ],
+        "configuration": "./syntaxes/language-configurations/twirl-html.language-configuration.json",
         "icon": {
           "dark": "icons/file_type_play.svg",
           "light": "icons/file_type_play.svg"
         }
-			},
+      },
       {
         "id": "twirl-xml",
         "aliases": [
