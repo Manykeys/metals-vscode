@@ -126,7 +126,7 @@
       "name": "meta.embedded.util.matchCurlyTemplateBlock",
       "begin": "\\{",
       "end": "\\}",
-      "patterns": [{ "include": "#twirl-in-html" }, { "include": "$self" }]
+      "patterns": [{ "include": "$self" }]
     },
     "scala-template-block": {
       "name": "meta.embedded.twirl.source.templateBlock",
