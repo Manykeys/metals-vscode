@@ -9,7 +9,7 @@
     "ide",
     "scalameta"
   ],
-  "version": "1.65.3",
+  "version": "1.66.1",
   "publisher": "scalameta",
   "contributors": [
     {
@@ -53,6 +53,7 @@
     "onLanguage:twirl-xml",
     "onLanguage:twirl-js",
     "onLanguage:twirl-txt",
+    "onFileSystem:metalsfs",
     "workspaceContains:build.sbt",
     "workspaceContains:build.sc",
     "workspaceContains:build.mill",
@@ -367,6 +368,12 @@
           "scope": "window",
           "markdownDescription": "Enable best effort mode for Metals in Scala 3. If enabled, Metals will try to provide most up to date information from the codebase even if it's not compiling."
         },
+        "metals.experimental.librariesFileSystem": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "(Experimental) Show project dependency JARs and JDK sources as a virtual folder in the Explorer view. Restart Metals after toggling."
+        },
         "metals.defaultShell": {
           "type": "string",
           "scope": "machine-overridable",
@@ -376,6 +383,12 @@
           "type": "string",
           "default": "1.6.7",
           "markdownDescription": "The version of the Metals server artifact. Requires reloading the window.  \n\n**VS Code extension version is guaranteed to work only with the default version, change if you know what you're doing**"
+        },
+        "metals.customServerLauncher": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Optional command to launch a Metals-compatible language server over standard input/output. When set, this completely overrides the default Metals server launch flow, including `metals.serverVersion`, `metals.serverProperties`, and `metals.customRepositories`."
         },
         "metals.serverProperties": {
           "type": "array",
@@ -771,6 +784,11 @@
         "title": "Show release notes"
       },
       {
+        "command": "metals.show-libraries-folder",
+        "category": "Metals",
+        "title": "Show libraries folder in file explorer"
+      },
+      {
         "command": "metals.scalafix-run",
         "category": "Metals",
         "title": "Run all Scalafix rules"
@@ -1105,6 +1123,10 @@
           "when": "metals:enabled"
         },
         {
+          "command": "metals.show-libraries-folder",
+          "when": "metals:enabled && config.metals.experimental.librariesFileSystem"
+        },
+        {
           "command": "metals.scalafix-run",
           "when": "metals:enabled"
         },
@@ -1378,28 +1400,28 @@
     "@types/js-yaml": "4.0.9",
     "@types/marked": "^6.0.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "25.6.0",
+    "@types/node": "25.9.1",
     "@types/node-fetch": "^2.6.13",
     "@types/semver": "^7.7.1",
     "@types/shell-quote": "^1.6.1",
     "@types/sinon": "^21.0.1",
     "@types/vscode": "1.59.0",
     "@types/yauzl": "^2.10.3",
-    "@typescript-eslint/eslint-plugin": "^8.59.0",
-    "@typescript-eslint/parser": "^8.59.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
     "@vscode/test-electron": "^2.3.0",
     "@vscode/vsce": "^3.9.1",
     "chai": "^6.2.2",
     "conventional-changelog-cli": "5.0.0",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-mocha": "^11.2.0",
+    "eslint-plugin-mocha": "^11.3.0",
     "glob": "^13.0.6",
     "mocha": "^11.7.5",
-    "ovsx": "0.10.11",
+    "ovsx": "0.10.12",
     "prettier": "3.8.3",
     "rimraf": "^6.1.3",
-    "sinon": "^21.1.2",
+    "sinon": "^22.0.0",
     "ts-mocha": "^10.1.0",
     "typescript": "6.0.3"
   },
@@ -1407,10 +1429,10 @@
     "ansicolor": "^2.0.3",
     "fp-ts": "^2.16.11",
     "js-yaml": "4.1.1",
-    "marked": "^18.0.2",
+    "marked": "^18.0.4",
     "node-fetch": "^3.3.2",
     "promisify-child-process": "4.1.2",
-    "semver": "^7.7.4",
+    "semver": "^7.8.0",
     "shell-quote": "^1.8.3",
     "vscode-languageclient": "9.0.1",
     "vscode-languageserver-protocol": "3.17.5",

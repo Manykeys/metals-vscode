@@ -34,6 +34,7 @@ import {
   debug,
   DebugSessionCustomEvent,
   ThemeColor,
+  FileSystemProvider,
 } from "vscode";
 import {
   LanguageClient,
@@ -92,10 +93,11 @@ import { setupCoursier } from "./setupCoursier";
 import { getJavaOptions } from "./getJavaOptions";
 import { getJavaConfig, JavaConfig } from "./getJavaConfig";
 import { fetchMetals } from "./fetchMetals";
-import { getServerOptions } from "./getServerOptions";
+import { getCustomServerOptions, getServerOptions } from "./getServerOptions";
 import { isSupportedLanguage } from "./isSupportedLanguage";
 import { readRequiredVmOptions } from "./readRequiredVmOptions";
 import { MetalsInitializationOptions } from "./interfaces/MetalsInitializationOptions";
+import { ServerOptions } from "./interfaces/ServerOptions";
 import { restartServer } from "./commands/restartServer";
 import { ServerCommands } from "./interfaces/ServerCommands";
 import { ClientCommands } from "./interfaces/ClientCommands";
@@ -120,8 +122,11 @@ import { MetalsSlowTaskType } from "./interfaces/MetalsSlowTask";
 import { downloadProgress } from "./downloadProgress";
 import { detectLaunchConfigurationChanges } from "./detectLaunchConfigurationChanges";
 import { registerCopyPasteHooks } from "./metalsCopyPaste";
+import MetalsFileSystemProvider from "./MetalsFileSystemProvider";
 
 const outputChannel = window.createOutputChannel("Metals");
+
+const librariesURI = Uri.parse("metalsfs:/metalsLibraries");
 
 let treeViews: MetalsTreeViews | undefined;
 let currentClient: LanguageClient | undefined;
@@ -399,10 +404,19 @@ function debugInformation(
   Java configuration: 
     - coursier: ${javaConfig.coursier}
     - coursier mirror: ${javaConfig.coursierMirrorFilePath}
-    - extra environment: ${javaConfig.extraEnv}
+    - extra environment: ${JSON.stringify(javaConfig.extraEnv ?? {})}
     - java options: ${javaConfig.javaOptions}
     - java path: ${javaConfig.javaPath}
     `;
+}
+
+function getConfiguredServerOptions(): ServerOptions | undefined {
+  const command = config.get<string>("customServerLauncher")?.trim();
+  if (!command) {
+    return undefined;
+  }
+
+  return getCustomServerOptions(command);
 }
 
 async function fetchAndLaunchMetals(
@@ -411,6 +425,17 @@ async function fetchAndLaunchMetals(
   javaVersion: JavaVersion,
   forceCoursierJar = false,
 ) {
+  const configuredServerOptions = getConfiguredServerOptions();
+  if (configuredServerOptions) {
+    outputChannel.appendLine("Using custom Metals server launcher.");
+    return launchMetalsWithServerOptions(
+      outputChannel,
+      context,
+      configuredServerOptions,
+      serverVersion,
+    );
+  }
+
   outputChannel.appendLine(`Metals version: ${serverVersion}`);
 
   /* eslint-disable @typescript-eslint/no-non-null-assertion */
@@ -567,9 +592,6 @@ async function launchMetals(
   javaConfig: JavaConfig,
   serverVersion: string,
 ) {
-  // Make editing Scala docstrings slightly nicer.
-  enableScaladocIndentation();
-
   // Read required VM options from the Metals JAR (META-INF/metals-required-vm-options.txt)
   const requiredVmOptions = await readRequiredVmOptions(metalsClasspath);
   if (requiredVmOptions.length > 0) {
@@ -581,7 +603,6 @@ async function launchMetals(
   const allClientExtensions = new Set<string>(["kilocode.kilo-code"]);
 
   const activeClientExtensions = extensions.all
-    .filter((e) => e.isActive)
     .map((e) => e.id)
     .filter((e) => allClientExtensions.has(e));
 
@@ -593,6 +614,27 @@ async function launchMetals(
     requiredVmOptions,
     activeClientExtensions,
   );
+
+  return launchMetalsWithServerOptions(
+    outputChannel,
+    context,
+    serverOptions,
+    serverVersion,
+  );
+}
+
+async function launchMetalsWithServerOptions(
+  outputChannel: OutputChannel,
+  context: ExtensionContext,
+  serverOptions: ServerOptions,
+  serverVersion: string,
+) {
+  // Make editing Scala docstrings slightly nicer.
+  enableScaladocIndentation();
+
+  const librariesFileSystemEnabled = workspace
+    .getConfiguration("metals")
+    .get<boolean>("experimental.librariesFileSystem", false);
 
   const commandArgs = [
     serverOptions.run.command,
@@ -626,6 +668,7 @@ async function launchMetals(
     icons: "vscode",
     inputBoxProvider: true,
     isVirtualDocumentSupported: true,
+    isLibraryFileSystemSupported: librariesFileSystemEnabled,
     openFilesOnRenameProvider: true,
     openNewWindowProvider: true,
     quickPickProvider: true,
@@ -650,6 +693,12 @@ async function launchMetals(
       { scheme: "file", language: "twirl-txt" },
       { scheme: "jar", language: "scala" },
       { scheme: "jar", language: "java" },
+      ...(librariesFileSystemEnabled
+        ? [
+          { scheme: "metalsfs", language: "scala" },
+          { scheme: "metalsfs", language: "java" },
+        ]
+        : []),
     ],
     synchronize: {
       configurationSection: "metals",
@@ -722,6 +771,18 @@ async function launchMetals(
   ) {
     context.subscriptions.push(
       commands.registerTextEditorCommand(command, callback),
+    );
+  }
+
+  function registerFileSystemProvider(
+    scheme: string,
+    provider: FileSystemProvider,
+  ) {
+    context.subscriptions.push(
+      workspace.registerFileSystemProvider(scheme, provider, {
+        isCaseSensitive: true,
+        isReadonly: true,
+      }),
     );
   }
 
@@ -809,6 +870,7 @@ async function launchMetals(
     () => {
       registerBloopInstance();
       const doctorProvider = new DoctorProvider(client, context);
+      let metalsFileSystemProvider: MetalsFileSystemProvider | undefined;
       let stacktrace: WebviewPanel | undefined;
 
       function getStacktracePanel(): WebviewPanel {
@@ -1099,6 +1161,24 @@ async function launchMetals(
             }
             case ClientCommands.BuildConnect: {
               commands.executeCommand(ServerCommands.BuildConnect);
+              break;
+            }
+            case ClientCommands.LibraryFileSystemReady: {
+              if (!metalsFileSystemProvider) {
+                metalsFileSystemProvider = new MetalsFileSystemProvider(
+                  client,
+                  librariesURI,
+                );
+                registerFileSystemProvider(
+                  librariesURI.scheme,
+                  metalsFileSystemProvider,
+                );
+                registerCommand("metals.show-libraries-folder", async () =>
+                  addLibrariesFolder(),
+                );
+              }
+              metalsFileSystemProvider.reinitialiseURI(librariesURI);
+              addLibrariesFolder();
               break;
             }
             default:
@@ -1763,6 +1843,40 @@ function detectConfigurationChanges() {
   );
 }
 
+function addLibrariesFolder() {
+  const libraryFolderName = "Metals - Libraries";
+
+  const newLibraryFolder = {
+    uri: librariesURI,
+    name: libraryFolderName,
+  };
+  const folderByUri = workspace.getWorkspaceFolder(librariesURI);
+  if (folderByUri && folderByUri.name !== libraryFolderName) {
+    workspace.updateWorkspaceFolders(folderByUri.index, 1, newLibraryFolder);
+  } else {
+    const folderByName = workspace.workspaceFolders?.find(
+      (folder) => folder.name === libraryFolderName,
+    );
+    if (
+      folderByName &&
+      folderByName.uri.toString() !== librariesURI.toString()
+    ) {
+      if (folderByUri) {
+        workspace.updateWorkspaceFolders(folderByName.index, 1);
+      } else {
+        workspace.updateWorkspaceFolders(
+          folderByName.index,
+          1,
+          newLibraryFolder,
+        );
+      }
+    } else if (!folderByUri) {
+      const workspaceCount = workspace.workspaceFolders?.length ?? 0;
+      workspace.updateWorkspaceFolders(workspaceCount, null, newLibraryFolder);
+    }
+  }
+}
+
 // NOTE(gabro): we would normally use the `configurationDefaults` contribution point in the
 // extension manifest but that's currently limited to language-scoped settings in VSCode.
 // We use this method to set global configuration settings such as `files.watcherExclude`.
@@ -1785,6 +1899,9 @@ function configureSettingsDefaults() {
           return configProperty?.workspaceValue ?? {};
       }
     })();
+    delete currentValues["**/.bloop"];
+    delete currentValues["**/.metals"];
+    delete currentValues["**/target"];
     config.update(
       propertyKey,
       { ...currentValues, ...newValues },
@@ -1795,8 +1912,8 @@ function configureSettingsDefaults() {
     "files",
     "watcherExclude",
     {
-      "**/.bloop": true,
-      "**/.metals": true,
+      "**/.bloop/**": true,
+      "**/.metals/**": true,
     },
     ConfigurationTarget.Global,
   );
@@ -1804,7 +1921,7 @@ function configureSettingsDefaults() {
     "files",
     "watcherExclude",
     {
-      "**/target": true,
+      "**/target/**": true,
     },
     ConfigurationTarget.Workspace,
   );
